@@ -9,7 +9,11 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Text;
 import javafx.event.ActionEvent;
 import javafx.application.Platform;
+
+import java.io.*;
 import java.net.URL;
+import java.nio.file.Files;
+import java.util.Base64;
 import java.util.ResourceBundle;
 import javafx.fxml.Initializable;
 import java.net.URI;
@@ -17,9 +21,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpRequest.BodyPublishers;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.InputStream;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -185,8 +186,56 @@ public class ChatController implements Initializable {
     }
 
     @FXML
-    private void uploadFile(ActionEvent event) {
+    private void uploadImage() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg", "*.gif"));
+        File file = fileChooser.showOpenDialog(uploadButton.getScene().getWindow());
 
+        if (file != null) {
+            String base64Image = encodeImageToBase64(file);
+            if (base64Image != null) {
+                String question = userInput.getText(); // Captura el texto del chat
+                sendImageToOllama(base64Image, question);
+            }
+        }
+    }
+
+    private String encodeImageToBase64(File file) {
+        try {
+            byte[] fileContent = Files.readAllBytes(file.toPath());
+            return Base64.getEncoder().encodeToString(fileContent);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private void sendImageToOllama(String base64Image, String question) {
+        JSONObject json = new JSONObject();
+        json.put("image", base64Image);
+        json.put("question", question);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:11434/api/generate"))
+                .header("Content-Type", "application/json")
+                .POST(BodyPublishers.ofString(json.toString()))
+                .build();
+
+        httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenAccept(response -> {
+                    if (response.statusCode() == 200) {
+                        String responseBody = response.body();
+                        Platform.runLater(() -> {
+                            System.out.println("Response from server: " + responseBody);
+                        });
+                    } else {
+                        System.err.println("Error: " + response.statusCode());
+                    }
+                })
+                .exceptionally(e -> {
+                    e.printStackTrace();
+                    return null;
+                });
     }
 
     private void cancelStreamRequest() {
